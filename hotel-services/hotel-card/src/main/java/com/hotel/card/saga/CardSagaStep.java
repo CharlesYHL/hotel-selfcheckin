@@ -14,20 +14,20 @@ import java.util.List;
 
 /**
  * Saga 步骤：制卡服务。
- * doStep: 制卡完成（实际制卡在 CheckInEventConsumer 中执行）
+ * execute: 制卡完成（实际制卡在 CheckInEventConsumer 中执行）
  * compensate: 注销门卡
  */
 @Component
 @Slf4j
 @RequiredArgsConstructor
+@SagaStep(order = 4, name = "cardStep", timeoutSeconds = 30)
 public class CardSagaStep implements SagaStepInterface {
 
     private final RoomCardMapper cardMapper;
 
     @Override
-    @SagaStep(name = "cardStep", compensateMethod = "compensateCard", timeoutSeconds = 30)
-    public boolean doStep(SagaContext context) {
-        String checkinId = (String) context.get("checkinId");
+    public Object execute(SagaContext context) {
+        String checkinId = (String) context.getAttributes().get("checkinId");
         if (checkinId == null) {
             log.warn("Saga 上下文中无 checkinId，跳过制卡步骤");
             return true;
@@ -36,10 +36,11 @@ public class CardSagaStep implements SagaStepInterface {
         return true;
     }
 
-    public boolean compensateCard(SagaContext context) {
-        String checkinId = (String) context.get("checkinId");
+    @Override
+    public void compensate(SagaContext context) {
+        String checkinId = (String) context.getAttributes().get("checkinId");
         if (checkinId == null) {
-            return true;
+            return;
         }
         List<RoomCard> cards = cardMapper.selectByCheckinId(checkinId);
         for (RoomCard card : cards) {
@@ -49,6 +50,5 @@ public class CardSagaStep implements SagaStepInterface {
                 log.info("Saga 补偿: 注销门卡, cardId={}", card.getCardId());
             }
         }
-        return true;
     }
 }
