@@ -1,0 +1,57 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+    gateway:
+      routes:
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/api/order/**
+        - id: room-service
+          uri: lb://room-service
+          predicates:
+            - Path=/api/room/**
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/pay/**
+        - id: checkin-service
+          uri: lb://checkin-service
+          predicates:
+            - Path=/api/checkin/**
+        - id: card-service
+          uri: lb://card-service
+          predicates:
+            - Path=/api/card/**
+        - id: member-service
+          uri: lb://member-service
+          predicates:
+            - Path=/api/member/**
+
+jwt:
+  secret: ${JWT_SECRET:hotel-selfcheckin-jwt-secret-key-min-256-bits!!}
+  expiration: 86400000
+
+sign:
+  secret: ${SIGN_SECRET:hotel-sign-secret-change-in-production}
+  enabled: true
+  maxAge: 300000
+
+gateway:
+  white-list:
+    paths:
+      - /api/auth/
+      - /api/sms/send
+      - /actuator
+      - /static
+
+logging:
+  level:
+    com.hotel.gateway: INFO
