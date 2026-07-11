@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -46,10 +47,12 @@ class SagaExecutorWithTimeoutTest {
 
     @SagaStep(order = 1, name = "slowStep", timeoutSeconds = 1)
     static class SlowStep implements SagaStepInterface {
+        private final CountDownLatch latch = new CountDownLatch(1);
+
         @Override
         public Object execute(SagaContext context) {
             try {
-                Thread.sleep(5000); // 超过 timeoutSeconds=1
+                latch.await(); // 阻塞直到被 task.cancel(true) 中断
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }

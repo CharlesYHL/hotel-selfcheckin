@@ -62,7 +62,7 @@ public class SagaExecutorWithTimeout {
             ctx.setStatus(SagaStatus.COMPENSATING);
             repository.save(ctx);
             SagaExecutor fallback = new SagaExecutor(repository, eventPublisher);
-            fallback.execute(sorted, ctx);
+            fallback.executeCompensate(sorted, ctx);
         }
         return ok;
     }
@@ -91,6 +91,10 @@ public class SagaExecutorWithTimeout {
 
                 try {
                     Object result = step.execute(ctx);
+                    // 如果执行期间被中断（超时取消），不记录为完成
+                    if (Thread.currentThread().isInterrupted()) {
+                        return false;
+                    }
                     record.setStatus(StepStatus.COMPLETED);
                     record.setForwardResult(serialize(result));
                     ctx.getStepRecords().add(record);

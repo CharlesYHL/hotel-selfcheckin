@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -14,6 +15,7 @@ import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
@@ -50,16 +52,8 @@ class CacheServiceTest {
     void setUp() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         cacheService = new CacheService();
-        try {
-            var redisField = CacheService.class.getDeclaredField("redisTemplate");
-            redisField.setAccessible(true);
-            redisField.set(cacheService, redisTemplate);
-            var redissonField = CacheService.class.getDeclaredField("redisson");
-            redissonField.setAccessible(true);
-            redissonField.set(cacheService, redisson);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        ReflectionTestUtils.setField(cacheService, "redisTemplate", redisTemplate);
+        ReflectionTestUtils.setField(cacheService, "redisson", redisson);
     }
 
     @Nested
@@ -206,12 +200,21 @@ class CacheServiceTest {
     class AvalancheProtection {
 
         @Test
-        @DisplayName("setWithJitter: 每次 TTL 应不同（随机性验证）")
+        @DisplayName("setWithJitter: TTL 应在 [base, base+jitter] 范围内")
         void shouldVaryTtlWithJitter() {
-            // 验证 jitter 方法调用不会抛异常即可（随机性由 Math.random 保证）
-            assertDoesNotThrow(() ->
-                    cacheService.setWithJitter("test:jitter", "value",
-                            Duration.ofHours(1), Duration.ofMinutes(10)));
+            Duration base = Duration.ofHours(1);
+            Duration jitter = Duration.ofMinutes(10);
+
+            cacheService.setWithJitter("test:jitter", "value", base, jitter);
+
+            ArgumentCaptor<Duration> durationCaptor = ArgumentCaptor.forClass(Duration.class);
+            verify(valueOperations).set(eq("test:jitter"), eq("value"), durationCaptor.capture());
+            Duration actualTtl = durationCaptor.getValue();
+            // 验证 TTL 在 [base, base + jitter] 范围内
+            assertTrue(actualTtl.compareTo(base) >= 0,
+                    "Expected TTL >= " + base + " but got " + actualTtl);
+            assertTrue(actualTtl.compareTo(base.plus(jitter)) <= 0,
+                    "Expected TTL <= " + base.plus(jitter) + " but got " + actualTtl);
         }
     }
 

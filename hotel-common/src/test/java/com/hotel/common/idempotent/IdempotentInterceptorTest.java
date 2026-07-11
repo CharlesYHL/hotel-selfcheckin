@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -39,20 +40,12 @@ class IdempotentInterceptorTest {
     @Mock
     private MethodSignature methodSignature;
 
+    @InjectMocks
     private IdempotentInterceptor interceptor;
 
     @BeforeEach
     void setUp() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        interceptor = new IdempotentInterceptor();
-        // Inject mock redisTemplate via reflection
-        try {
-            var field = IdempotentInterceptor.class.getDeclaredField("redisTemplate");
-            field.setAccessible(true);
-            field.set(interceptor, redisTemplate);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
     }
 
     /**
@@ -67,6 +60,33 @@ class IdempotentInterceptorTest {
             public String keyPrefix() { return keyPrefix; }
             @Override
             public String staticKey() { return ""; }
+            @Override
+            public String[] fields() { return fields; }
+            @Override
+            public long expireSeconds() { return expireSeconds; }
+            @Override
+            public long timeoutSeconds() { return timeoutSeconds; }
+            @Override
+            public boolean deleteOnSuccess() { return deleteOnSuccess; }
+            @Override
+            public ConcurrentStrategy concurrentStrategy() { return strategy; }
+            @Override
+            public Class<? extends java.lang.annotation.Annotation> annotationType() { return Idempotent.class; }
+        };
+    }
+
+    /**
+     * Helper to create a mock Idempotent annotation with staticKey support.
+     */
+    private Idempotent mockIdempotentWithStaticKey(String keyPrefix, String staticKey, String[] fields,
+                                                    long expireSeconds, long timeoutSeconds,
+                                                    boolean deleteOnSuccess,
+                                                    Idempotent.ConcurrentStrategy strategy) {
+        return new Idempotent() {
+            @Override
+            public String keyPrefix() { return keyPrefix; }
+            @Override
+            public String staticKey() { return staticKey; }
             @Override
             public String[] fields() { return fields; }
             @Override
@@ -264,5 +284,103 @@ class IdempotentInterceptorTest {
             verify(valueOperations).setIfAbsent(keyCaptor.capture(), eq("PROCESSING"), any(Duration.class));
             assertTrue(keyCaptor.getValue().startsWith("idempotent:payment:callback"));
         }
+
+        @Test
+        @DisplayName("空 keyPrefix → 使用类名:方法名作为前缀")
+        void shouldUseClassNameAndMethodNameWhenPrefixEmpty() throws Throwable {
+            Idempotent annotation = mockIdempotent("", new String[0],
+                    3600, 0, false, Idempotent.ConcurrentStrategy.WAIT);
+
+            when(joinPoint.getSignature()).thenReturn(methodSignature);
+            when(methodSignature.getName()).thenReturn("handlePayment");
+            when(joinPoint.getTarget()).thenReturn(new PaymentController());
+            when(valueOperations.setIfAbsent(anyString(), eq("PROCESSING"), any(Duration.class)))
+                    .thenReturn(true);
+            when(joinPoint.proceed()).thenReturn("ok");
+
+            interceptor.around(joinPoint, annotation);
+
+            ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+            verify(valueOperations).setIfAbsent(keyCaptor.capture(), eq("PROCESSING"), any(Duration.class));
+            String key = keyCaptor.getValue();
+            assertTrue(key.startsWith("idempotent:PaymentController:handlePayment"),
+                    "Expected key to start with 'idempotent:PaymentController:handlePayment' but got: " + key);
+        }
+
+        @Test
+        @DisplayName("keyPrefix + staticKey → 拼接 staticKey")
+        void shouldAppendStaticKey() throws Throwable {
+            Idempotent annotation = mockIdempotentWithStaticKey("order", "create", new String[0],
+                    3600, 0, false, Idempotent.ConcurrentStrategy.WAIT);
+
+            when(joinPoint.getSignature()).thenReturn(methodSignature);
+            when(methodSignature.getName()).thenReturn("testMethod");
+            when(joinPoint.getTarget()).thenReturn(new Object());
+            when(valueOperations.setIfAbsent(anyString(), eq("PROCESSING"), any(Duration.class)))
+                    .thenReturn(true);
+            when(joinPoint.proceed()).thenReturn("ok");
+
+            interceptor.around(joinPoint, annotation);
+
+            ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+            verify(valueOperations).setIfAbsent(keyCaptor.capture(), eq("PROCESSING"), any(Duration.class));
+            String key = keyCaptor.getValue();
+            assertTrue(key.startsWith("idempotent:order:create"),
+                    "Expected key to start with 'idempotent:order:create' but got: " + key);
+        }
+
+        @Test
+        @DisplayName("keyPrefix + fields → 拼装字段值")
+        void shouldAppendFieldValues() throws Throwable {
+            Idempotent annotation = mockIdempotent("order", new String[]{"orderId"},
+                    3600, 0, false, Idempotent.ConcurrentStrategy.WAIT);
+
+            // 创建一个带 getOrderId() 方法的请求对象
+            var request = new Object() {
+                @SuppressWarnings("unused")
+                public String getOrderId() { return "ORD-12345"; }
+            };
+
+            when(joinPoint.getSignature()).thenReturn(methodSignature);
+            when(methodSignature.getName()).thenReturn("testMethod");
+            when(joinPoint.getTarget()).thenReturn(new Object());
+            when(joinPoint.getArgs()).thenReturn(new Object[]{request});
+            when(valueOperations.setIfAbsent(anyString(), eq("PROCESSING"), any(Duration.class)))
+                    .thenReturn(true);
+            when(joinPoint.proceed()).thenReturn("ok");
+
+            interceptor.around(joinPoint, annotation);
+
+            ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+            verify(valueOperations).setIfAbsent(keyCaptor.capture(), eq("PROCESSING"), any(Duration.class));
+            String key = keyCaptor.getValue();
+            assertTrue(key.startsWith("idempotent:order:ORD-12345"),
+                    "Expected key to start with 'idempotent:order:ORD-12345' but got: " + key);
+        }
+
+        @Test
+        @DisplayName("fields 为 null args → 不拼接字段值")
+        void shouldHandleNullArgs() throws Throwable {
+            Idempotent annotation = mockIdempotent("order", new String[]{"orderId"},
+                    3600, 0, false, Idempotent.ConcurrentStrategy.WAIT);
+
+            when(joinPoint.getSignature()).thenReturn(methodSignature);
+            when(methodSignature.getName()).thenReturn("testMethod");
+            when(joinPoint.getTarget()).thenReturn(new Object());
+            when(joinPoint.getArgs()).thenReturn(null); // args 为 null
+            when(valueOperations.setIfAbsent(anyString(), eq("PROCESSING"), any(Duration.class)))
+                    .thenReturn(true);
+            when(joinPoint.proceed()).thenReturn("ok");
+
+            // 不应抛异常
+            Object result = interceptor.around(joinPoint, annotation);
+            assertEquals("ok", result);
+        }
+    }
+
+    /**
+     * 测试用的 Controller 类，用于验证空 keyPrefix 时的类名回退。
+     */
+    static class PaymentController {
     }
 }
