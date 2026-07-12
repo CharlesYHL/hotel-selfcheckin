@@ -605,6 +605,29 @@ CREATE TABLE saga_log (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Saga 执行日志表';
 
 -- ============================================================
+-- 系统用户表（认证）
+-- ============================================================
+
+CREATE TABLE sys_user (
+    user_id        VARCHAR(32) NOT NULL COMMENT '用户ID',
+    username       VARCHAR(50) NOT NULL COMMENT '用户名',
+    password       VARCHAR(200) NOT NULL COMMENT '密码(BCrypt)',
+    name           VARCHAR(50) NOT NULL COMMENT '姓名',
+    role           VARCHAR(50) NOT NULL COMMENT '角色: ROLE_ADMIN, ROLE_STAFF, ROLE_MEMBER',
+    phone          VARCHAR(20) COMMENT '手机号',
+    email          VARCHAR(100) COMMENT '邮箱',
+    avatar         VARCHAR(200) COMMENT '头像',
+    status         TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 1-正常, 0-禁用',
+    last_login_time DATETIME COMMENT '最后登录时间',
+    created_time   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id),
+    UNIQUE KEY uk_username (username),
+    KEY idx_role (role),
+    KEY idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户表';
+
+-- ============================================================
 -- 索引优化 (常用查询)
 -- ============================================================
 

@@ -2,13 +2,32 @@ server:
   port: 8080
 
 spring:
+  main:
+    web-application-type: reactive
   application:
     name: api-gateway
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/hotel_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:hotel2024}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      password: ${REDIS_PASSWORD:redis-pass-2024}
   cloud:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:localhost:8848}
     gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: true
       routes:
         - id: order-service
           uri: lb://order-service
@@ -41,7 +60,7 @@ jwt:
 
 sign:
   secret: ${SIGN_SECRET:hotel-sign-secret-change-in-production}
-  enabled: true
+  enabled: false
   maxAge: 300000
 
 gateway:

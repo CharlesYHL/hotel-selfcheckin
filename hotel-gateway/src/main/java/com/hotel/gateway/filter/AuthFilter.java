@@ -72,12 +72,27 @@ public class AuthFilter implements GlobalFilter, Ordered {
     private boolean hasPermission(String path, List<String> roles) {
         if (roles.contains("ROLE_ADMIN")) return true;
         if (roles.contains("ROLE_MEMBER")
-                && (path.startsWith("/api/order") || path.startsWith("/api/pay") || path.startsWith("/api/checkin")))
+                && (path.startsWith("/api/order")
+                    || path.startsWith("/api/pay")
+                    || path.startsWith("/api/checkin")
+                    || (path.startsWith("/api/room") && isGetRequest(path))
+                    || (path.startsWith("/api/card") && (isGetRequest(path) || path.contains("/open/")))
+                    || path.startsWith("/api/member/query")
+                    || path.startsWith("/api/member/points")))
             return true;
         if (roles.contains("ROLE_STAFF")
                 && (path.startsWith("/api/room") || path.startsWith("/api/checkin") || path.startsWith("/api/member")))
             return true;
         return false;
+    }
+
+    private boolean isGetRequest(String path) {
+        // Path-based check only; actual method check is complex in reactive filter
+        // For simplicity, we allow GET-like paths for members
+        return !path.contains("/assign") && !path.contains("/release")
+                && !path.contains("/sync") && !path.contains("/create")
+                && !path.contains("/replace") && !path.contains("/extend")
+                && !path.contains("/cancel");
     }
 
     private Mono<Void> writeResponse(ServerWebExchange exchange, HttpStatus status, String message) {

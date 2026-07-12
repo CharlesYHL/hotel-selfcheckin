@@ -68,3 +68,11 @@ VALUES
     ('D09', 'payment_type', '1', '微信', 'WECHAT', 1),
     ('D10', 'payment_type', '2', '支付宝', 'ALIPAY', 2),
     ('D11', 'payment_type', '3', '现金', 'CASH', 3);
+
+-- 系统用户
+-- 密码均为 BCrypt 加密: admin123 / member123 / staff123
+INSERT INTO sys_user (user_id, username, password, name, role, phone, status)
+VALUES
+    ('U001', 'admin', '$2a$10$IVDDpl0a3/ywQbL4R/ollOJkYjborI1i9GTXTQK6TDtE/f/bnXM1i', '系统管理员', 'ROLE_ADMIN', '13800000001', 1),
+    ('U002', 'member', '$2a$10$grgU86zaghrNlYLkfCJ0DOpwfs2H2t70U6YaE64/4PqEFlXeHLSZu', '张三', 'ROLE_MEMBER', '13800000002', 1),
+    ('U003', 'staff', '$2a$10$y3aTL1zC4MUjG6Ks2ZU96.rbLgcZ7eUfVV555A6yEKu6o4deMqmHS', '前台小王', 'ROLE_STAFF', '13800000003', 1);
