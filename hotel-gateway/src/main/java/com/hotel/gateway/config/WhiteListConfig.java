@@ -12,7 +12,8 @@ import java.util.List;
 public class WhiteListConfig {
 
     private List<String> paths = List.of(
-            "/api/auth/",
+            "/api/auth/login",
+            "/api/auth/refresh",
             "/api/sms/send",
             "/actuator",
             "/static"

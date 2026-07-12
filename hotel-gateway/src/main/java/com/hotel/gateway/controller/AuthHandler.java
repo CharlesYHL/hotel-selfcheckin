@@ -1,6 +1,7 @@
 package com.hotel.gateway.controller;
 
 import com.hotel.common.core.Result;
+import com.hotel.common.security.JwtUtil;
 import com.hotel.common.security.TokenService;
 import com.hotel.gateway.model.entity.User;
 import com.hotel.gateway.service.UserService;
@@ -27,6 +28,7 @@ public class AuthHandler {
 
     private final UserService userService;
     private final TokenService tokenService;
+    private final JwtUtil jwtUtil;
 
     public Mono<ServerResponse> login(ServerRequest request) {
         return request.bodyToMono(LoginRequest.class)
@@ -96,11 +98,27 @@ public class AuthHandler {
     }
 
     public Mono<ServerResponse> me(ServerRequest request) {
-        String userId = request.headers().firstHeader("X-User-Id");
-        if (userId == null) {
+        // AuthFilter is a Spring Cloud Gateway GlobalFilter; it does NOT apply
+        // to standalone RouterFunction routes, so we must validate JWT ourselves.
+        String auth = request.headers().firstHeader("Authorization");
+        if (auth == null || !auth.startsWith("Bearer ")) {
             return ServerResponse.status(401)
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(Result.fail(401, "未登录"));
+        }
+        String token = auth.substring(7);
+        String userId;
+        try {
+            if (!jwtUtil.validateToken(token)) {
+                return ServerResponse.status(401)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(Result.fail(401, "令牌无效"));
+            }
+            userId = jwtUtil.parseClaims(token).getSubject();
+        } catch (Exception e) {
+            return ServerResponse.status(401)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Result.fail(401, "令牌解析失败"));
         }
         Optional<User> userOpt = userService.findById(userId);
         if (userOpt.isEmpty()) {

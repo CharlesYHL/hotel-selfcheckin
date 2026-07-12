@@ -42,6 +42,4 @@ public class Order {
     private String remark;
     private LocalDateTime createdTime;
     private LocalDateTime updatedTime;
-    @com.baomidou.mybatisplus.annotation.Version
-    private Integer version;
 }
