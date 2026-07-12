@@ -1,2 +1,14 @@
 # MySQL configuration file for hotel-selfcheckin
-# This file is intentionally minimal - MySQL 8.0 defaults are sufficient for development
+# 关键设置：init 脚本（seed.sql）默认 connection charset 是 latin1，
+# 这会导致中文被双重编码（latin1 → utf8mb4 转换）。
+# 解决办法：把 client/mysql 端默认 charset 也设为 utf8mb4。
+[client]
+default-character-set = utf8mb4
+
+[mysql]
+default-character-set = utf8mb4
+
+[mysqld]
+character-set-server = utf8mb4
+collation-server = utf8mb4_0900_ai_ci
+init-connect = 'SET NAMES utf8mb4'
