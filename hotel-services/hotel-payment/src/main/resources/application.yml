@@ -23,7 +23,7 @@ spring:
         dashboard: ${SENTINEL_DASHBOARD:localhost:8858}
       eager: true
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP:kafka:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9093}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer

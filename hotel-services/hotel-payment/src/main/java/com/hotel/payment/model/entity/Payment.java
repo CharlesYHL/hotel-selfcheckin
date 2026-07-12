@@ -2,7 +2,6 @@ package com.hotel.payment.model.entity;
 
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.annotation.Version;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -36,6 +35,4 @@ public class Payment {
     private String paymentParams;
     private LocalDateTime createdTime;
     private LocalDateTime updatedTime;
-    @Version
-    private Integer version;
 }

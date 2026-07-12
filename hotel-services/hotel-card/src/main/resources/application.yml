@@ -9,6 +9,11 @@ spring:
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:hotel2024}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      password: ${REDIS_PASSWORD:redis-pass-2024}
   cloud:
     nacos:
       discovery:
@@ -18,7 +23,7 @@ spring:
         dashboard: ${SENTINEL_DASHBOARD:localhost:8858}
       eager: true
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP:kafka:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9093}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer

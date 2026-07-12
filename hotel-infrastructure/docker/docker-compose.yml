@@ -44,6 +44,7 @@ services:
   # ======================== Kafka ========================
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
+    platform: linux/amd64
     container_name: hotel-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -53,13 +54,18 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
+    platform: linux/amd64
     container_name: hotel-kafka
     ports:
       - "9092:9092"
+      - "9093:9093"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_NUM_PARTITIONS: 3
       KAFKA_DEFAULT_REPLICATION_FACTOR: 1
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -73,6 +79,7 @@ services:
   # ======================== Nacos ========================
   nacos:
     image: nacos/nacos-server:v2.3.1
+    platform: linux/amd64
     container_name: hotel-nacos
     ports:
       - "8848:8848"
@@ -86,6 +93,7 @@ services:
   # ======================== Sentinel Dashboard ========================
   sentinel-dashboard:
     image: bladex/sentinel-dashboard:1.8.6
+    platform: linux/amd64
     container_name: hotel-sentinel
     ports:
       - "8858:8858"
