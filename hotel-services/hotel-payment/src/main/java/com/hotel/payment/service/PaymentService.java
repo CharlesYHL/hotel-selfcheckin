@@ -38,6 +38,9 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResponse createPayment(PaymentCreateRequest request) {
+        log.info("[createPayment] 开始创建支付订单: orderId={}, orderNo={}, hotelId={}, amount={}, payChannel={}",
+                request.getOrderId(), request.getOrderNo(), request.getHotelId(), request.getAmount(), request.getPayChannel());
+
         Payment payment = new Payment();
         payment.setPaymentId("PAY" + UUID.randomUUID().toString().replace("-", "").substring(0, 24));
         payment.setPaymentNo("PN" + System.currentTimeMillis() + UUID.randomUUID().toString().replace("-", "").substring(0, 6));
@@ -57,9 +60,11 @@ public class PaymentService {
         payment.setUpdatedTime(LocalDateTime.now());
 
         paymentMapper.insert(payment);
-        log.info("支付订单创建: paymentId={}, paymentNo={}, orderId={}, amount={}",
-                payment.getPaymentId(), payment.getPaymentNo(), payment.getOrderId(), payment.getAmount());
+        log.info("[createPayment] 支付订单已落库: paymentId={}, paymentNo={}, orderId={}, amount={}, status={}",
+                payment.getPaymentId(), payment.getPaymentNo(), payment.getOrderId(), payment.getAmount(), payment.getStatus());
 
+        log.info("[createPayment] 支付订单创建完成: paymentId={}, paymentNo={}, orderId={}, amount={}",
+                payment.getPaymentId(), payment.getPaymentNo(), payment.getOrderId(), payment.getAmount());
         return toResponse(payment);
     }
 
@@ -69,31 +74,45 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResponse handleCallback(PaymentCallbackRequest request) {
+        log.info("[handleCallback] 开始处理支付回调: paymentNo={}, tradeNo={}, status={}",
+                request.getPaymentNo(), request.getTradeNo(), request.getStatus());
+
         Payment payment = paymentMapper.selectByPaymentNo(request.getPaymentNo());
         if (payment == null) {
+            log.error("[handleCallback] 支付订单不存在: paymentNo={}", request.getPaymentNo());
             throw new BusinessException("支付订单不存在: " + request.getPaymentNo());
         }
+        log.info("[handleCallback] 查到支付记录: paymentId={}, paymentNo={}, currentStatus={}",
+                payment.getPaymentId(), payment.getPaymentNo(), PaymentStatus.of(payment.getStatus()).getDesc());
 
         if (payment.getStatus() == PaymentStatus.PAID.getCode()) {
-            log.info("支付已处理，跳过: paymentNo={}", request.getPaymentNo());
+            log.info("[handleCallback] 支付已处理，跳过重复回调: paymentNo={}", request.getPaymentNo());
             return toResponse(payment);
         }
 
         if (payment.getStatus() != PaymentStatus.PENDING.getCode()
                 && payment.getStatus() != PaymentStatus.PAYING.getCode()) {
+            log.warn("[handleCallback] 支付状态异常，拒绝回调: paymentNo={}, currentStatus={}",
+                    request.getPaymentNo(), PaymentStatus.of(payment.getStatus()).getDesc());
             throw new BusinessException("支付状态异常: " + PaymentStatus.of(payment.getStatus()).getDesc());
         }
 
         int updated = paymentMapper.updatePaid(payment.getPaymentId(),
                 PaymentStatus.PAID.getCode(), request.getTradeNo(), payment.getStatus());
         if (updated == 0) {
+            log.error("[handleCallback] 支付状态更新失败(并发冲突): paymentId={}, paymentNo={}",
+                    payment.getPaymentId(), request.getPaymentNo());
             throw new BusinessException("支付状态更新失败，可能已被并发处理");
         }
+        log.info("[handleCallback] 支付状态更新成功: paymentId={}, oldStatus={}, newStatus=PAID, tradeNo={}",
+                payment.getPaymentId(), PaymentStatus.of(payment.getStatus()).getDesc(), request.getTradeNo());
 
         payment.setStatus(PaymentStatus.PAID.getCode());
         payment.setTradeNo(request.getTradeNo());
         payment.setPayTime(LocalDateTime.now());
 
+        log.info("[handleCallback] 发送支付成功事件到 Kafka: paymentId={}, orderId={}, eventType=PAID",
+                payment.getPaymentId(), payment.getOrderId());
         kafkaTemplate.send("payment-events", PaymentEvent.builder()
                 .paymentId(payment.getPaymentId())
                 .paymentNo(payment.getPaymentNo())
@@ -106,7 +125,8 @@ public class PaymentService {
                 .timestamp(System.currentTimeMillis())
                 .build());
 
-        log.info("支付成功: paymentId={}, orderId={}, tradeNo={}", payment.getPaymentId(), payment.getOrderId(), request.getTradeNo());
+        log.info("[handleCallback] 支付回调处理完成: paymentId={}, orderId={}, tradeNo={}, amount={}",
+                payment.getPaymentId(), payment.getOrderId(), request.getTradeNo(), payment.getAmount());
         return toResponse(payment);
     }
 
@@ -115,14 +135,26 @@ public class PaymentService {
      */
     @Transactional
     public RefundResponse applyRefund(RefundRequest request) {
+        log.info("[applyRefund] 开始退款申请: paymentId={}, refundNo={}, amount={}, reason={}",
+                request.getPaymentId(), request.getRefundNo(), request.getRefundAmount(), request.getRefundReason());
+
         Payment payment = paymentMapper.selectById(request.getPaymentId());
         if (payment == null) {
+            log.error("[applyRefund] 支付订单不存在: paymentId={}", request.getPaymentId());
             throw new BusinessException("支付订单不存在");
         }
+        log.info("[applyRefund] 查到支付记录: paymentId={}, paymentNo={}, currentStatus={}, originalAmount={}",
+                payment.getPaymentId(), payment.getPaymentNo(),
+                PaymentStatus.of(payment.getStatus()).getDesc(), payment.getAmount());
+
         if (payment.getStatus() != PaymentStatus.PAID.getCode()) {
+            log.warn("[applyRefund] 非已支付订单拒绝退款: paymentId={}, currentStatus={}",
+                    payment.getPaymentId(), PaymentStatus.of(payment.getStatus()).getDesc());
             throw new BusinessException("仅已支付订单可退款");
         }
         if (request.getRefundAmount().compareTo(payment.getAmount()) > 0) {
+            log.warn("[applyRefund] 退款金额超限: paymentId={}, refundAmount={}, originalAmount={}",
+                    payment.getPaymentId(), request.getRefundAmount(), payment.getAmount());
             throw new BusinessException("退款金额不能超过支付金额");
         }
 
@@ -140,13 +172,19 @@ public class PaymentService {
         refund.setCreatedTime(LocalDateTime.now());
         refund.setUpdatedTime(LocalDateTime.now());
         refundMapper.insert(refund);
+        log.info("[applyRefund] 退款记录已落库: refundId={}, refundNo={}, paymentId={}, amount={}",
+                refund.getRefundId(), refund.getRefundNo(), payment.getPaymentId(), refund.getRefundAmount());
 
-        paymentMapper.updateRefunded(payment.getPaymentId(),
+        int updated = paymentMapper.updateRefunded(payment.getPaymentId(),
                 PaymentStatus.REFUNDED.getCode(),
                 refund.getRefundId(), refund.getRefundAmount(),
                 refund.getRefundTime(), refund.getRefundReason(),
                 PaymentStatus.PAID.getCode());
+        log.info("[applyRefund] 支付状态更新: paymentId={}, updatedRows={}, newStatus=REFUNDED",
+                payment.getPaymentId(), updated);
 
+        log.info("[applyRefund] 发送退款事件到 Kafka: paymentId={}, orderId={}, eventType=REFUNDED, amount={}",
+                payment.getPaymentId(), payment.getOrderId(), request.getRefundAmount());
         kafkaTemplate.send("payment-events", PaymentEvent.builder()
                 .paymentId(payment.getPaymentId())
                 .paymentNo(payment.getPaymentNo())
@@ -158,7 +196,8 @@ public class PaymentService {
                 .timestamp(System.currentTimeMillis())
                 .build());
 
-        log.info("退款完成: refundId={}, paymentId={}, amount={}", refund.getRefundId(), payment.getPaymentId(), request.getRefundAmount());
+        log.info("[applyRefund] 退款完成: refundId={}, paymentId={}, amount={}",
+                refund.getRefundId(), payment.getPaymentId(), request.getRefundAmount());
 
         return RefundResponse.builder()
                 .refundId(refund.getRefundId())
@@ -176,10 +215,14 @@ public class PaymentService {
      * 查询支付状态。
      */
     public PaymentResponse queryPayment(String paymentId) {
+        log.info("[queryPayment] 查询支付记录: paymentId={}", paymentId);
         Payment payment = paymentMapper.selectById(paymentId);
         if (payment == null) {
+            log.warn("[queryPayment] 支付订单不存在: paymentId={}", paymentId);
             throw new BusinessException("支付订单不存在");
         }
+        log.info("[queryPayment] 查询成功: paymentId={}, paymentNo={}, orderId={}, status={}",
+                payment.getPaymentId(), payment.getPaymentNo(), payment.getOrderId(), PaymentStatus.of(payment.getStatus()).getDesc());
         return toResponse(payment);
     }
 
@@ -187,11 +230,16 @@ public class PaymentService {
      * 按订单ID查询支付记录。
      */
     public PaymentResponse queryByOrderId(String orderId) {
+        log.info("[queryByOrderId] 按订单查询支付记录: orderId={}", orderId);
         var payments = paymentMapper.selectByOrderId(orderId);
         if (payments.isEmpty()) {
+            log.warn("[queryByOrderId] 未找到支付记录: orderId={}", orderId);
             throw new BusinessException("未找到支付记录");
         }
-        return toResponse(payments.get(0));
+        Payment payment = payments.get(0);
+        log.info("[queryByOrderId] 查询成功: paymentId={}, paymentNo={}, orderId={}, status={}",
+                payment.getPaymentId(), payment.getPaymentNo(), payment.getOrderId(), PaymentStatus.of(payment.getStatus()).getDesc());
+        return toResponse(payment);
     }
 
     private PaymentResponse toResponse(Payment p) {
