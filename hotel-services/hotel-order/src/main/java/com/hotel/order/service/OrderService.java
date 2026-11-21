@@ -65,10 +65,13 @@ public class OrderService {
     }
 
     public OrderResponse queryOrder(String orderId) {
+        log.info("开始查询订单: orderId={}", orderId);
         Order order = orderMapper.selectById(orderId);
         if (order == null) {
+            log.warn("查询订单不存在: orderId={}", orderId);
             throw new BusinessException("订单不存在");
         }
+        log.info("查询订单成功: orderId={}, orderNo={}, status={}", order.getOrderId(), order.getOrderNo(), order.getOrderStatus());
         return toResponse(order);
     }
 

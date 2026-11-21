@@ -7,11 +7,13 @@ import com.hotel.order.model.dto.OrderResponse;
 import com.hotel.order.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/order")
 @RequiredArgsConstructor
+@Slf4j
 public class OrderController {
 
     private final OrderService orderService;
@@ -25,6 +27,7 @@ public class OrderController {
 
     @GetMapping("/query/{orderId}")
     public Result<OrderResponse> query(@PathVariable String orderId) {
+        log.info("查询订单请求: orderId={}", orderId);
         return Result.success(orderService.queryOrder(orderId));
     }
 
